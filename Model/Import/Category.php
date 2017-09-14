@@ -1003,6 +1003,12 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
             }
 
         } else {
+            if (isset($rowData[self::COL_ROOT]) && isset($rowData[self::COL_CATEGORY])) {
+
+                $root = $rowData[self::COL_ROOT];
+                $category = $rowData[self::COL_CATEGORY];
+            }
+
             if (null === $category) {
                 $this->addRowError(self::ERROR_CATEGORY_IS_EMPTY, $rowNum);
             } elseif (false === $category) {
@@ -1035,12 +1041,12 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
      */
     public function getRowScope(array $rowData)
     {
-        if (isset($rowData[self::COL_CATEGORY]) && strlen(trim($rowData[self::COL_CATEGORY]))) {
-            return self::SCOPE_DEFAULT;
-        } elseif (empty($rowData[self::COL_STORE])) {
-            return self::SCOPE_NULL;
-        } else {
+        if (!empty($rowData[self::COL_STORE])) {
             return self::SCOPE_STORE;
+        } elseif (isset($rowData[self::COL_CATEGORY]) && strlen(trim($rowData[self::COL_CATEGORY]))) {
+            return self::SCOPE_DEFAULT;
+        }   else {
+            return self::SCOPE_NULL;
         }
     }
 
@@ -1175,6 +1181,9 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
                             CategoryModel::KEY_LEVEL => $entityRow[CategoryModel::KEY_LEVEL]
                         ];
                     }
+                } else {
+                    // read entity id for just store view updates
+                    $entityId = $this->categoriesWithRoots[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]]['entity_id'];
                 }
 
                 foreach ($this->imagesArrayKeys as $imageCol) {
@@ -1399,7 +1408,6 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
                     }
                 }
             }
-
             $this->_connection->insertOnDuplicate($tableName, $tableData, ['value']);
         }
 
