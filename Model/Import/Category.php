@@ -314,6 +314,10 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
      * @var CategoryRepositoryInterface
      */
     private $categoryRepository;
+    /**
+     * @var \Magento\CatalogUrlRewrite\Model\CategoryUrlPathGenerator
+     */
+    private $categoryUrlPathGenerator;
 
     /**
      * Category constructor.
@@ -359,6 +363,7 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
         TransactionManagerInterface $transactionManager,
         CategoryResourceModelFactory $resourceFactory,
         \Magento\CatalogUrlRewrite\Model\CategoryUrlRewriteGenerator $categoryUrlRewriteGenerator,
+        \Magento\CatalogUrlRewrite\Model\CategoryUrlPathGenerator $categoryUrlPathGenerator,
         CategoryRepositoryInterface $categoryRepository,
         UrlPersistInterface $urlPersist,
         array $data = []
@@ -410,6 +415,7 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
         $this->categoryUrlRewriteGenerator = $categoryUrlRewriteGenerator;
         $this->urlPersist = $urlPersist;
         $this->categoryRepository = $categoryRepository;
+        $this->categoryUrlPathGenerator = $categoryUrlPathGenerator;
     }
 
     /**
@@ -800,18 +806,42 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
     protected function reindexUpdatedCategories($categoryId)
     {
         /** @var $category \Magento\Catalog\Model\Category */
-        $category = $this->defaultCategory->load($categoryId);
+        $category =$this->categoryRepository->get($categoryId);
+
+        //$urlRewrites = $this->categoryUrlRewriteGenerator->generate($category, true);
+        //$this->urlPersist->replace($urlRewrites);
         //$categoryName = $category->getName();
+
         foreach ($category->getStoreIds() as $storeId) {
             if ($storeId == 0) {
                 continue;
             }
 
             $category = $this->categoryRepository->get($categoryId, $storeId);
+/*
+            $useDefaultAttribute = !$category->isObjectNew() && !empty($category->getData('use_default')['url_key']);
+            if ($category->getUrlKey() !== false && !$useDefaultAttribute) {
+                $resultUrlKey = $this->categoryUrlPathGenerator->getUrlKey($category);
+                if (empty($resultUrlKey)) {
+                    throw new \Magento\Framework\Exception\LocalizedException(__('Invalid URL key'));
+                }
+                $category->setUrlKey($resultUrlKey);
+                $category->setUrlPath($this->categoryUrlPathGenerator->getUrlPath($category));
+                if (!$category->isObjectNew()) {
+                    $category->getResource()->saveAttribute($category, 'url_path');
+                }
+            }
+*/
 
             $urlRewrites = $this->categoryUrlRewriteGenerator->generate($category, true);
-            $this->urlPersist->replace($urlRewrites);
+            try {
+
+                $this->urlPersist->replace($urlRewrites);
+            } catch (\Exception $e) {
+                echo "got exception on writing url rewrites";
+            }
         }
+
         return $this;
     }
 
@@ -1009,7 +1039,7 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
                 $category = $rowData[self::COL_CATEGORY];
             }
 
-            if (null === $category) {
+            if ((null === $category || '' === $category) && !$root) {
                 $this->addRowError(self::ERROR_CATEGORY_IS_EMPTY, $rowNum);
             } elseif (false === $category) {
                 $this->addRowError(self::ERROR_ROW_IS_ORPHAN, $rowNum);
@@ -1153,13 +1183,7 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
                     $time = !empty($rowData[CategoryModel::KEY_CREATED_AT]) ? strtotime($rowData[CategoryModel::KEY_CREATED_AT]) : null;
 
                     // entity table data
-                    $entityRow = [
-                        CategoryModel::KEY_PARENT_ID => $parentCategory['entity_id'],
-                        CategoryModel::KEY_LEVEL => $parentCategory[CategoryModel::KEY_LEVEL] + 1,
-                        CategoryModel::KEY_CREATED_AT => (new \DateTime($time))->format(DateTime::DATETIME_PHP_FORMAT),
-                        CategoryModel::KEY_UPDATED_AT => "now()",
-                        CategoryModel::KEY_POSITION => $rowData[CategoryModel::KEY_POSITION]
-                    ];
+                    $entityRow = $this->prepareCategoryRow($parentCategory['entity_id'], $parentCategory[CategoryModel::KEY_LEVEL], $time, $rowData[CategoryModel::KEY_POSITION]);
 
                     if (isset($this->categoriesWithRoots[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]])) { //edit
                         $entityId = $this->categoriesWithRoots[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]]['entity_id'];
@@ -1181,7 +1205,14 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
                             CategoryModel::KEY_LEVEL => $entityRow[CategoryModel::KEY_LEVEL]
                         ];
                     }
-                } else {
+                } else if (self::SCOPE_STORE == $rowScope) {
+                    $parentCategory = $this->getParentCategory($rowData);
+
+                    $time = !empty($rowData[CategoryModel::KEY_CREATED_AT]) ? strtotime($rowData[CategoryModel::KEY_CREATED_AT]) : null;
+
+                    // entity table data
+                    $entityRow = $this->prepareCategoryRow($parentCategory['entity_id'], $parentCategory[CategoryModel::KEY_LEVEL], $time, $rowData[CategoryModel::KEY_POSITION]);
+
                     // read entity id for just store view updates
                     $entityId = $this->categoriesWithRoots[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]]['entity_id'];
                 }
@@ -1263,6 +1294,16 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
             $this->saveCategoryAttributes($attributes);
         }
         return $this;
+    }
+
+    protected function prepareCategoryRow($parentId, $parentLevel, $time, $position) {
+        return  [
+            CategoryModel::KEY_PARENT_ID => $parentId,
+            CategoryModel::KEY_LEVEL => $parentLevel + 1,
+            CategoryModel::KEY_CREATED_AT => (new \DateTime($time))->format(DateTime::DATETIME_PHP_FORMAT),
+            CategoryModel::KEY_UPDATED_AT => "now()",
+            CategoryModel::KEY_POSITION => $position
+        ];
     }
 
     /**
