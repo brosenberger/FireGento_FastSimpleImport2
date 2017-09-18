@@ -1206,12 +1206,12 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
                         ];
                     }
                 } else if (self::SCOPE_STORE == $rowScope) {
-                    $parentCategory = $this->getParentCategory($rowData);
+                 //   $parentCategory = $this->getParentCategory($rowData);
 
-                    $time = !empty($rowData[CategoryModel::KEY_CREATED_AT]) ? strtotime($rowData[CategoryModel::KEY_CREATED_AT]) : null;
+                 //   $time = !empty($rowData[CategoryModel::KEY_CREATED_AT]) ? strtotime($rowData[CategoryModel::KEY_CREATED_AT]) : null;
 
                     // entity table data
-                    $entityRow = $this->prepareCategoryRow($parentCategory['entity_id'], $parentCategory[CategoryModel::KEY_LEVEL], $time, $rowData[CategoryModel::KEY_POSITION]);
+//                    $entityRow = $this->prepareCategoryRow($parentCategory['entity_id'], $parentCategory[CategoryModel::KEY_LEVEL], $time, $rowData[CategoryModel::KEY_POSITION]);
 
                     // read entity id for just store view updates
                     $entityId = $this->categoriesWithRoots[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]]['entity_id'];
