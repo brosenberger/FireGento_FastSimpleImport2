@@ -319,6 +319,8 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
      */
     private $categoryUrlPathGenerator;
 
+
+    private $entityId2rowId = [];
     /**
      * Category constructor.
      * @param StringUtils $string
@@ -525,7 +527,8 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
 
                 $index = $this->implodeEscaped($this->_scopeConfig->getValue(Config::XML_PATH_CATEGORY_PATH_SEPERATOR), $path);
                 $this->categoriesWithRoots[$rootCategoryName][$index] = [
-                    'entity_id' => $category->getId(),
+                    'row_id' => $category->getRowId(),
+                    'entity_id' => $category->getEntityId(),
                     CategoryModel::KEY_PATH => $category->getData(CategoryModel::KEY_PATH),
                     CategoryModel::KEY_LEVEL => $category->getData(CategoryModel::KEY_LEVEL),
                     CategoryModel::KEY_POSITION => $category->getData(CategoryModel::KEY_POSITION)
@@ -818,22 +821,27 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
             }
 
             $category = $this->categoryRepository->get($categoryId, $storeId);
-/*
-            $useDefaultAttribute = !$category->isObjectNew() && !empty($category->getData('use_default')['url_key']);
-            if ($category->getUrlKey() !== false && !$useDefaultAttribute) {
-                $resultUrlKey = $this->categoryUrlPathGenerator->getUrlKey($category);
-                if (empty($resultUrlKey)) {
-                    throw new \Magento\Framework\Exception\LocalizedException(__('Invalid URL key'));
-                }
-                $category->setUrlKey($resultUrlKey);
-                $category->setUrlPath($this->categoryUrlPathGenerator->getUrlPath($category));
-                if (!$category->isObjectNew()) {
-                    $category->getResource()->saveAttribute($category, 'url_path');
-                }
-            }
-*/
+            /*
+                        $useDefaultAttribute = !$category->isObjectNew() && !empty($category->getData('use_default')['url_key']);
+                        if ($category->getUrlKey() !== false && !$useDefaultAttribute) {
+                            $resultUrlKey = $this->categoryUrlPathGenerator->getUrlKey($category);
+                            if (empty($resultUrlKey)) {
+                                throw new \Magento\Framework\Exception\LocalizedException(__('Invalid URL key'));
+                            }
+                            $category->setUrlKey($resultUrlKey);
+                            $category->setUrlPath($this->categoryUrlPathGenerator->getUrlPath($category));
+                            if (!$category->isObjectNew()) {
+                                $category->getResource()->saveAttribute($category, 'url_path');
+                            }
+                        }
+            */
+            try {
 
-            $urlRewrites = $this->categoryUrlRewriteGenerator->generate($category, true);
+                $urlRewrites = $this->categoryUrlRewriteGenerator->generate($category, true);
+            } catch (\Exception $e) {
+                // ignore some deleted stores?
+                echo "got exception on url generation for store ".$storeId;
+            }
             try {
 
                 $this->urlPersist->replace($urlRewrites);
@@ -1188,6 +1196,7 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
                     if (isset($this->categoriesWithRoots[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]])) { //edit
                         $entityId = $this->categoriesWithRoots[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]]['entity_id'];
                         $entityRow['entity_id'] = $entityId;
+                        $entityRow['row_id'] = $this->categoriesWithRoots[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]]['row_id'];
                         $entityRow[CategoryModel::KEY_PATH] = $parentCategory[CategoryModel::KEY_PATH] . '/' . $entityId;
                         $entityRowsUp[] = $entityRow;
                         $rowData['entity_id'] = $entityId;
@@ -1206,9 +1215,9 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
                         ];
                     }
                 } else if (self::SCOPE_STORE == $rowScope) {
-                 //   $parentCategory = $this->getParentCategory($rowData);
+                    //   $parentCategory = $this->getParentCategory($rowData);
 
-                 //   $time = !empty($rowData[CategoryModel::KEY_CREATED_AT]) ? strtotime($rowData[CategoryModel::KEY_CREATED_AT]) : null;
+                    //   $time = !empty($rowData[CategoryModel::KEY_CREATED_AT]) ? strtotime($rowData[CategoryModel::KEY_CREATED_AT]) : null;
 
                     // entity table data
 //                    $entityRow = $this->prepareCategoryRow($parentCategory['entity_id'], $parentCategory[CategoryModel::KEY_LEVEL], $time, $rowData[CategoryModel::KEY_POSITION]);
@@ -1322,7 +1331,7 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
 
         if (self::SCOPE_DEFAULT == $this->getRowScope($rowData)) {
             $rowData[CategoryModel::KEY_NAME] = $this->getCategoryName($rowData);
-
+            $rowData['store_id'] = 0;
             if (!isset($rowData[CategoryModel::KEY_POSITION])) {
                 // diglin - prevent warning message
                 $rowData[CategoryModel::KEY_POSITION] = 10000;
@@ -1414,6 +1423,11 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
             );
         }
 
+        $result = $this->_connection->fetchAll("select max(row_id) as 'row_id', entity_id from catalog_category_entity group by entity_id");
+        foreach ($result as $element) {
+            $this->entityId2rowId[$element['entity_id']] = $element['row_id'];
+        }
+
         return $this;
     }
 
@@ -1441,7 +1455,7 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
                 foreach ($attributes as $attributeId => $storeValues) {
                     foreach ($storeValues as $storeId => $storeValue) {
                         $tableData[] = [
-                            $entityFieldName => $entityId,
+                            $entityFieldName => $this->entityId2rowId[$entityId],
                             'attribute_id' => $attributeId,
                             'store_id' => $storeId,
                             'value' => $storeValue
