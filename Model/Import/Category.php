@@ -973,10 +973,12 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
         $this->_validatedRows[$rowNum] = true;
 
 
+        $rowScope = $this->getRowScope($rowData);
         //check for duplicates
         if (isset($rowData[self::COL_ROOT])
             && isset($rowData[self::COL_CATEGORY])
             && isset($this->newCategory[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]])
+            && $rowScope!=self::SCOPE_STORE
         ) {
             if (!$this->getIgnoreDuplicates()) {
                 $this->addRowError(self::ERROR_DUPLICATE_CATEGORY, $rowNum);
@@ -984,7 +986,6 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
 
             return false;
         }
-        $rowScope = $this->getRowScope($rowData);
 
         // BEHAVIOR_DELETE use specific validation logic
         if (Import::BEHAVIOR_DELETE == $this->getBehavior()) {
@@ -1223,7 +1224,11 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
 //                    $entityRow = $this->prepareCategoryRow($parentCategory['entity_id'], $parentCategory[CategoryModel::KEY_LEVEL], $time, $rowData[CategoryModel::KEY_POSITION]);
 
                     // read entity id for just store view updates
-                    $entityId = $this->categoriesWithRoots[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]]['entity_id'];
+                    if (isset($this->categoriesWithRoots[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]]['entity_id'])) {
+                        $entityId = $this->categoriesWithRoots[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]]['entity_id'];
+                    } else {
+                        $entityId = $this->newCategory[$rowData[self::COL_ROOT]][$rowData[self::COL_CATEGORY]]['entity_id'];
+                    }
                 }
 
                 foreach ($this->imagesArrayKeys as $imageCol) {
