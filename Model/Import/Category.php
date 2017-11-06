@@ -517,7 +517,7 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
                 for ($i = 1; $i < $pathSize; $i++) {
                     /** @var CategoryModel $c */
                     $c = $collection->getItemById($structure[$i]);
-                    $path[] = $c->getData(CategoryModel::KEY_NAME);
+                    $path[] = $this->getCategoryPathValue($c);
                 }
 
                 $rootCategoryName = array_shift($path);
@@ -548,10 +548,15 @@ class Category extends \Magento\ImportExport\Model\Import\AbstractEntity
 
     }
 
+    public function getCategoryPathValue($c) {
+        /** @var CategoryModel $c */
+        return $c->getData(CategoryModel::KEY_NAME);
+    }
+
     /**
      * @return \Magento\Catalog\Model\ResourceModel\Category\Collection
      */
-    protected function getCollection()
+    public function getCollection()
     {
         return $this->categoryCollection->setStoreId(0)->addNameToResult();
     }
